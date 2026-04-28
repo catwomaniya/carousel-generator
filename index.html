@@ -890,9 +890,56 @@ function objsHTML(s){
   }).join('');
 }
 
-function doExport(){ alert('To save slides:\n• Mac: Cmd+Shift+4, drag over slide\n• Windows: Win+Shift+S\n\nProduction build exports all '+slides.length+' slides as 1080×1350px PNGs.'); }
+function doExport(){
+  var btn = document.querySelector('.tb.pr');
+  var origText = btn.textContent;
+  var box = document.getElementById('slide-box');
+  var scale = 1080 / 370;
+  var savedIdx = idx;
+  var total = slides.length;
+  var current = 0;
+
+  function captureNext(){
+    if(current >= total){
+      idx = savedIdx;
+      renderSlide();
+      btn.textContent = origText;
+      btn.disabled = false;
+      return;
+    }
+    idx = current;
+    renderSlide();
+    btn.textContent = 'Exporting ' + (current+1) + '/' + total + '…';
+    // Allow DOM to paint before capturing
+    requestAnimationFrame(function(){
+      requestAnimationFrame(function(){
+        html2canvas(box, {
+          scale: scale,
+          useCORS: true,
+          allowTaint: true,
+          backgroundColor: null,
+          width: 370,
+          height: 462,
+          windowWidth: 370,
+          windowHeight: 462
+        }).then(function(canvas){
+          var link = document.createElement('a');
+          link.download = 'slide-' + String(current+1).padStart(2,'0') + '.png';
+          link.href = canvas.toDataURL('image/png');
+          link.click();
+          current++;
+          setTimeout(captureNext, 300);
+        });
+      });
+    });
+  }
+
+  btn.disabled = true;
+  captureNext();
+}
 
 init();
 </script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 </body>
 </html>
