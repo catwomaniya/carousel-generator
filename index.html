@@ -241,6 +241,7 @@ select.ei{cursor:pointer}
 /* T7 Dark Luxe */
 .t7{width:100%;height:100%;background:#0D1326;display:flex;flex-direction:column;position:relative;overflow:hidden}
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 </head>
 <body>
 <div class="app">
@@ -1313,6 +1314,15 @@ function objsHTML(s){
 }
 
 function doExport(){
+  if(typeof html2canvas === 'undefined'){
+    alert('Export library not loaded yet — please wait a moment and try again.');
+    return;
+  }
+  // Exit image edit mode and remove any overlays before capturing
+  if(imgEditMode) exitImgEdit();
+  var cap = document.getElementById('img-click-cap');
+  if(cap) cap.remove();
+
   var btn = document.querySelector('.tb.pr');
   var origText = btn.textContent;
   var box = document.getElementById('slide-box');
@@ -1321,18 +1331,23 @@ function doExport(){
   var total = slides.length;
   var current = 0;
 
+  function finish(){
+    idx = savedIdx;
+    renderSlide();
+    btn.textContent = origText;
+    btn.disabled = false;
+  }
+
   function captureNext(){
-    if(current >= total){
-      idx = savedIdx;
-      renderSlide();
-      btn.textContent = origText;
-      btn.disabled = false;
-      return;
-    }
+    if(current >= total){ finish(); return; }
     idx = current;
     renderSlide();
+    // Strip overlays that shouldn't appear in the export
+    var overlay = document.getElementById('img-edit-overlay');
+    if(overlay) overlay.remove();
+    var clickCap = document.getElementById('img-click-cap');
+    if(clickCap) clickCap.remove();
     btn.textContent = 'Exporting ' + (current+1) + '/' + total + '…';
-    // Allow DOM to paint before capturing
     requestAnimationFrame(function(){
       requestAnimationFrame(function(){
         html2canvas(box, {
@@ -1343,14 +1358,19 @@ function doExport(){
           width: 370,
           height: 462,
           windowWidth: 370,
-          windowHeight: 462
+          windowHeight: 462,
+          ignoreElements: function(el){ return el.id === 'img-click-cap' || el.id === 'img-edit-overlay'; }
         }).then(function(canvas){
           var link = document.createElement('a');
           link.download = 'slide-' + String(current+1).padStart(2,'0') + '.png';
           link.href = canvas.toDataURL('image/png');
           link.click();
           current++;
-          setTimeout(captureNext, 300);
+          setTimeout(captureNext, 400);
+        }).catch(function(err){
+          console.error('Export failed on slide '+(current+1)+':', err);
+          alert('Export failed on slide '+(current+1)+'. Check console for details.');
+          finish();
         });
       });
     });
@@ -1362,6 +1382,5 @@ function doExport(){
 
 init();
 </script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 </body>
 </html>
