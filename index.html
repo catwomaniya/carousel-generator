@@ -242,6 +242,7 @@ select.ei{cursor:pointer}
 .t7{width:100%;height:100%;background:#0D1326;display:flex;flex-direction:column;position:relative;overflow:hidden}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </head>
 <body>
 <div class="app">
@@ -1314,14 +1315,13 @@ function objsHTML(s){
 }
 
 function doExport(){
-  if(typeof html2canvas === 'undefined'){
-    alert('Export library not loaded yet — please wait a moment and try again.');
+  if(typeof html2canvas === 'undefined' || typeof JSZip === 'undefined'){
+    alert('Export libraries not loaded yet — please wait a moment and try again.');
     return;
   }
-  // Exit image edit mode and remove any overlays before capturing
+  // Exit image edit mode and strip any overlays before capturing
   if(imgEditMode) exitImgEdit();
-  var cap = document.getElementById('img-click-cap');
-  if(cap) cap.remove();
+  ['img-click-cap','img-edit-overlay'].forEach(function(id){ var el=document.getElementById(id); if(el) el.remove(); });
 
   var btn = document.querySelector('.tb.pr');
   var origText = btn.textContent;
@@ -1330,6 +1330,9 @@ function doExport(){
   var savedIdx = idx;
   var total = slides.length;
   var current = 0;
+  var zip = new JSZip();
+
+  btn.disabled = true;
 
   function finish(){
     idx = savedIdx;
@@ -1339,15 +1342,27 @@ function doExport(){
   }
 
   function captureNext(){
-    if(current >= total){ finish(); return; }
+    if(current >= total){
+      // All slides captured — build and download ZIP
+      btn.textContent = 'Zipping…';
+      zip.generateAsync({ type:'blob' }).then(function(blob){
+        var link = document.createElement('a');
+        link.download = 'carousel-slides.zip';
+        link.href = URL.createObjectURL(blob);
+        link.click();
+        URL.revokeObjectURL(link.href);
+        finish();
+      }).catch(function(err){
+        alert('Failed to create ZIP: ' + err.message);
+        finish();
+      });
+      return;
+    }
     idx = current;
     renderSlide();
-    // Strip overlays that shouldn't appear in the export
-    var overlay = document.getElementById('img-edit-overlay');
-    if(overlay) overlay.remove();
-    var clickCap = document.getElementById('img-click-cap');
-    if(clickCap) clickCap.remove();
-    btn.textContent = 'Exporting ' + (current+1) + '/' + total + '…';
+    // Strip overlays — they must not appear in exports
+    ['img-click-cap','img-edit-overlay'].forEach(function(id){ var el=document.getElementById(id); if(el) el.remove(); });
+    btn.textContent = 'Capturing ' + (current+1) + ' / ' + total + '…';
     requestAnimationFrame(function(){
       requestAnimationFrame(function(){
         html2canvas(box, {
@@ -1359,24 +1374,23 @@ function doExport(){
           height: 462,
           windowWidth: 370,
           windowHeight: 462,
-          ignoreElements: function(el){ return el.id === 'img-click-cap' || el.id === 'img-edit-overlay'; }
+          ignoreElements: function(el){ return el.id==='img-click-cap' || el.id==='img-edit-overlay'; }
         }).then(function(canvas){
-          var link = document.createElement('a');
-          link.download = 'slide-' + String(current+1).padStart(2,'0') + '.png';
-          link.href = canvas.toDataURL('image/png');
-          link.click();
+          var filename = 'slide-' + String(current+1).padStart(2,'0') + '.png';
+          var dataUrl = canvas.toDataURL('image/png');
+          var base64 = dataUrl.split(',')[1];
+          zip.file(filename, base64, { base64: true });
           current++;
-          setTimeout(captureNext, 400);
+          setTimeout(captureNext, 300);
         }).catch(function(err){
-          console.error('Export failed on slide '+(current+1)+':', err);
-          alert('Export failed on slide '+(current+1)+'. Check console for details.');
+          console.error('Capture failed on slide '+(current+1)+':', err);
+          alert('Capture failed on slide '+(current+1)+': '+err.message);
           finish();
         });
       });
     });
   }
 
-  btn.disabled = true;
   captureNext();
 }
 
